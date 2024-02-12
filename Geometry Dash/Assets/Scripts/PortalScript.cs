@@ -5,9 +5,9 @@ using UnityEngine;
 public class PortalScript : MonoBehaviour
 {
 
-    public GameModes GameMode;
+    public Gamemodes GameMode;
     public Speeds Speed;
-    public Gravity Gravity;
+    public bool Gravity;
     public int State;
 
     private void OnCollisionEnter2D(Collision2D collision)
@@ -16,7 +16,7 @@ public class PortalScript : MonoBehaviour
         {
             Movement movement = collision.gameObject.GetComponent<Movement>();
 
-            movement.ChangeThroughPortal(GameMode, Speed, Gravity, State);
+            movement.ChangeThroughPortal(GameMode, Speed, Gravity ? 1 : -1, State);
         }
         catch
         {
