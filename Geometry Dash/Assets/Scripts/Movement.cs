@@ -2,8 +2,54 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
+// GameModes, Definitions and Values
+
+
+// Cube: Simple jumping cube, rotates 90 on jump
+// initial velocity = 19.5269f
+// gravity scale = 9.057f
+// rotationMod = 409.1f
+// OnGround = true
+// Camera = FreeCam
+
+
+// Ship: Fly up while holding action, drop down with !action
+// OnGround = false
+// Camera = Static
+
+
+// Ball: Slow flip to opposite side with gravity scale, like dropping a ball
+// gravity scale = 6.2f
+// OnGround = true
+// Camera = Static
+
+
+// UFO: Fly up with click, drop down with !click
+// initial velocity = 10.841f
+// gravity scale = 4.1483f
+// velocity limit = 10.841f
+// OnGround = false
+// Camera = Static
+
+
+// Wave: has a 1:1 on incline and decline
+// Camera = Static
+
+
+// Robot: 
+// Camera = FreeCam
+
+
+// Spider: Fast flip to opposite side, mechanical feel
+// initial velocity = 238.29f
+// gravity scale = 6.2f
+// velocity limit = 238.29f
+// OnGround = true
+// Camera = Static
+
+
+public enum Gamemodes { Cube = 0, Ship = 1, Ball = 2, UFO = 3, Wave = 4, Robot = 5, Spider = 6};
 public enum Speeds { Slow = 0, Normal = 1, Fast = 2, Faster = 3, Fastest = 4 };
-public enum Gamemodes { Cube = 0, Ship = 1 };
 
 public class Movement : MonoBehaviour
 {
@@ -11,15 +57,18 @@ public class Movement : MonoBehaviour
     public Gamemodes CurrentGamemode;
     //                       0      1      2       3      4
     float[] SpeedValues = { 8.6f, 10.4f, 12.96f, 15.6f, 19.27f };
+    //                                  0   1   2   3   4   5  6
+    [System.NonSerialized] public int[] screenHeightValues = { 11, 10, 8, 10, 10, 11, 9 };
+    [System.NonSerialized] public float yLastPortal;
 
-    public Transform GroundCheckTransform;
     public float GroundCheckRadius;
     public LayerMask GroundMask;
     public Transform Sprite;
 
     Rigidbody2D rb;
 
-    int Gravity = 1;
+    public int Gravity = 1;
+    public bool clickProcessed = false;
 
     void Start()
     {
@@ -30,15 +79,12 @@ public class Movement : MonoBehaviour
     {
         transform.position += Vector3.right * SpeedValues[(int)CurrentSpeed] * Time.deltaTime;
 
-        if (rb.velocity.y < -24.2f)
-            rb.velocity = new Vector2(rb.velocity.x, -24.2f);
-
         Invoke(CurrentGamemode.ToString(), 0);
     }
 
-    bool OnGround()
+    public bool OnGround()
     {
-        return Physics2D.OverlapBox(GroundCheckTransform.position + Vector3.up - Vector3.up * (Gravity - 1 / -2), Vector2.right * 1.1f + Vector2.up * GroundCheckRadius, 0, GroundMask);
+        return Physics2D.OverlapBox(transform.position + Vector3.down * Gravity * 0.5f, Vector2.right * 1.1f + Vector2.up * GroundCheckRadius, 0, GroundMask);
     }
 
     bool TouchingWall()
@@ -48,45 +94,74 @@ public class Movement : MonoBehaviour
 
     void Cube()
     {
-        print(OnGround());
-
-        if (OnGround())
-        {
-
-            #region control rotation
-
-            // control rotation so player lands flat and not at an angle
-            Vector3 Rotation = Sprite.rotation.eulerAngles; // converts Quaternion into vector 3 to round up
-            Rotation.z = Mathf.Round(Rotation.z / 90) * 90; // rounds rotation up
-            Sprite.rotation = Quaternion.Euler(Rotation); // converts Vector 3 back into Quaternion
-
-            #endregion
-
-            if (Input.GetMouseButton(0))
-            {
-                rb.velocity = Vector2.zero;
-                rb.AddForce(Vector2.up * 26.6581f * Gravity, ForceMode2D.Impulse);
-            }
-        }
-        else
-        {
-            Sprite.Rotate(Vector3.back, 452.4152186f * Time.deltaTime * Gravity);
-        }
+        generic.CreateGameMode(rb, this, true, 19.5269f, 9.057f, true, false, 409.1f);
     }
 
     void Ship()
     {
+        rb.gravityScale = 2.93f * (Input.GetMouseButton(0) ? -1 : 1) * Gravity;
+        generic.LimitYVelocity(9.95f, rb);
         transform.rotation = Quaternion.Euler(0, 0, rb.velocity.y * 2);
-
-        if (Input.GetMouseButton(0))
-            rb.gravityScale = -4.314969f;
-        else
-            rb.gravityScale = 4.314969f;
-
-        rb.gravityScale = rb.gravityScale * Gravity; // sets gravity scale for when player travels through a gravity portal 
     }
 
-    public void ChangeThroughPortal(Gamemodes Gamemode, Speeds Speed, int gravity, int State)
+    void Ball()
+    {
+        generic.CreateGameMode(rb, this, true, 0, 6.2f, false, true);
+    }
+
+    void UFO()
+    {
+        generic.CreateGameMode(rb, this, false, 10.841f, 4.1483f, false, false, 0, 10.841f);
+    }
+
+    void Wave()
+    {
+        rb.gravityScale = 0;
+        rb.velocity = new Vector2(0, SpeedValues[(int)CurrentSpeed] * (Input.GetMouseButton(0) ? 1 : -1) * Gravity);
+    }
+
+    void Spider()
+    {
+        generic.CreateGameMode(rb, this, true, 238.29f, 6.2f, false, true, 0, 238.29f);
+    }
+
+    float robotXstart = -100;
+    bool onGroundProcessed;
+    bool gravityFlipped;
+
+    void Robot()
+    {
+        if (!Input.GetMouseButton(0))
+            clickProcessed = false;
+
+        if (OnGround() && !clickProcessed && Input.GetMouseButton(0))
+        {
+            gravityFlipped = false;
+            clickProcessed = true;
+            robotXstart = transform.position.x;
+            onGroundProcessed = true;
+        }
+
+        // checking distance of current x value and the x value of first frame
+        if (Mathf.Abs(robotXstart - transform.position.x) <= 3)
+        {
+            if (Input.GetMouseButton(0) && onGroundProcessed && !gravityFlipped)
+            {
+                rb.gravityScale = 0;
+                rb.velocity = Vector2.up * 10.4f * Gravity;
+                return;
+            }
+        }
+        else if (Input.GetMouseButton(0))
+            onGroundProcessed = false;
+
+        rb.gravityScale = 8.62f * Gravity;
+        generic.LimitYVelocity(23.66f, rb);
+    }
+
+
+
+    public void ChangeThroughPortal(Gamemodes Gamemode, Speeds Speed, int gravity, int State, float _yPortal)
     {
         switch (State)
         {
@@ -94,12 +169,21 @@ public class Movement : MonoBehaviour
                 CurrentSpeed = Speed;
                 break;
             case 1:
+                yLastPortal = _yPortal;
                 CurrentGamemode = Gamemode;
                 break;
             case 2:
                 Gravity = gravity;
                 rb.gravityScale = Mathf.Abs(rb.gravityScale) * gravity;
+                gravityFlipped = true;
                 break;
         }
+    }
+
+    private void OnTriggerEnter2D(Collider2D collision)
+    {
+        PortalScript portal = collision.gameObject.GetComponent<PortalScript>();
+        if (portal)
+            portal.InitiatePortal(this);
     }
 }
